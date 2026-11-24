@@ -1,0 +1,179 @@
+
+using UnityEngine;
+
+[RequireComponent(typeof(GhostPatrol))]
+public class GhostAudioController : MonoBehaviour
+{
+    [Header("Audio Clips")]
+    [SerializeField] private AudioClip idleClip;
+    [SerializeField] private AudioClip investigateClip;
+    [SerializeField] private AudioClip chaseClip;
+
+    [Header("Volume")]
+    [Range(0f, 1f)]
+    [SerializeField] private float idleVolume = 0.3f;
+
+    [Range(0f, 1f)]
+    [SerializeField] private float investigateVolume = 0.6f;
+
+    [Range(0f, 1f)]
+    [SerializeField] private float chaseVolume = 0.85f;
+
+    [Header("3D Audio Settings")]
+    [SerializeField] private float minDistance = 2f;
+    [SerializeField] private float maxDistance = 20f;
+
+    [Header("Chase Sound")]
+    [SerializeField] private bool repeatChaseSound = true;
+    [SerializeField] private float chaseRepeatInterval = 10f;
+
+    private GhostPatrol ghostPatrol;
+
+    private AudioSource idleSource;
+    private AudioSource eventSource;
+
+    private string lastState = "";
+    private float nextChaseSoundTime;
+
+    private float ghostVolumeMultiplier = 1f;
+    private float currentIdleBaseVolume = 0f;
+    private float currentEventBaseVolume = 0f;
+
+    private void Awake()
+    {
+        ghostPatrol = GetComponent<GhostPatrol>();
+
+        idleSource = gameObject.AddComponent<AudioSource>();
+        eventSource = gameObject.AddComponent<AudioSource>();
+
+        ConfigureAudioSource(idleSource);
+        ConfigureAudioSource(eventSource);
+
+        idleSource.loop = true;
+        eventSource.loop = false;
+    }
+
+    private void Start()
+    {
+        if (ghostPatrol == null)
+        {
+            Debug.LogError("GhostAudioController: äÁè¾º GhostPatrol");
+            return;
+        }
+
+        ChangeState(ghostPatrol.CurrentState);
+    }
+
+    private void Update()
+    {
+        if (ghostPatrol == null)
+            return;
+
+        string currentState = ghostPatrol.CurrentState;
+
+        if (currentState != lastState)
+        {
+            ChangeState(currentState);
+        }
+
+        if (currentState == "Chase" &&
+            repeatChaseSound &&
+            Time.time >= nextChaseSoundTime &&
+            !eventSource.isPlaying)
+        {
+            PlayEvent(chaseClip, chaseVolume);
+        }
+    }
+
+    private void ChangeState(string newState)
+    {
+        lastState = newState;
+
+        idleSource.Stop();
+        eventSource.Stop();
+
+        currentIdleBaseVolume = 0f;
+        currentEventBaseVolume = 0f;
+
+        switch (newState)
+        {
+            case "Patrol":
+                PlayIdle(idleClip, idleVolume);
+                break;
+
+            case "Investigate":
+                PlayEvent(investigateClip, investigateVolume);
+                break;
+
+            case "Chase":
+                PlayEvent(chaseClip, chaseVolume);
+                break;
+
+            case "Search":
+                PlayIdle(idleClip, idleVolume);
+                break;
+
+            default:
+                PlayIdle(idleClip, idleVolume);
+                break;
+        }
+    }
+
+    private void PlayIdle(AudioClip clip, float volume)
+    {
+        if (clip == null)
+            return;
+
+        currentIdleBaseVolume = volume;
+
+        idleSource.clip = clip;
+        idleSource.loop = true;
+        idleSource.volume = currentIdleBaseVolume * ghostVolumeMultiplier;
+        idleSource.Play();
+    }
+
+    private void PlayEvent(AudioClip clip, float volume)
+    {
+        if (clip == null)
+            return;
+
+        currentEventBaseVolume = volume;
+
+        eventSource.clip = clip;
+        eventSource.loop = false;
+        eventSource.volume = currentEventBaseVolume * ghostVolumeMultiplier;
+        eventSource.Play();
+
+        if (ghostPatrol != null && ghostPatrol.CurrentState == "Chase")
+        {
+            nextChaseSoundTime = Time.time + chaseRepeatInterval;
+        }
+    }
+
+    public void SetGhostVolume(float value)
+    {
+        ghostVolumeMultiplier = Mathf.Clamp01(value);
+
+        if (idleSource != null)
+        {
+            idleSource.volume =
+                currentIdleBaseVolume * ghostVolumeMultiplier;
+        }
+
+        if (eventSource != null)
+        {
+            eventSource.volume =
+                currentEventBaseVolume * ghostVolumeMultiplier;
+        }
+    }
+
+    private void ConfigureAudioSource(AudioSource source)
+    {
+        source.playOnAwake = false;
+        source.spatialBlend = 1f;
+        source.minDistance = minDistance;
+        source.maxDistance = maxDistance;
+        source.dopplerLevel = 0f;
+        source.rolloffMode = AudioRolloffMode.Logarithmic;
+    }
+}
